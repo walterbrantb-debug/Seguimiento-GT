@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Planner SEPTIEMBRE — Nueva versión (corte 12/09)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <style>
+    @media print{.no-print{display:none!important}}
+    .chip{border:1px solid rgba(0,0,0,.08); background:#fff; border-radius:999px; padding:.15rem .5rem; font-size:.75rem}
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 rounded-2xl bg-gray-900 text-white flex items-center justify-center text-sm font-semibold">PL</div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-semibold">Planner SEPTIEMBRE — Proyección a Cierre</h1>
+        <p class="text-xs text-gray-500">Feriados 18–19 cerrados · Domingos no operan · Días débiles: 15, 16, 20</p>
+      </div>
+    </div>
+    <div class="no-print flex items-center gap-2">
+      <input id="fileImport" type="file" accept=".xlsx,.xls,.csv" class="hidden"/>
+      <button id="btnImport" class="px-3 py-1.5 rounded-xl border text-xs">Importar</button>
+      <button id="btnPdf" class="px-3 py-1.5 rounded-xl border text-xs">Descargar PDF</button>
+      <button id="btnPrint" class="px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs">Imprimir</button>
+      <button id="btnReset" class="px-3 py-1.5 rounded-xl border text-xs">Reiniciar</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+  <!-- KPIs -->
+  <section class="bg-white rounded-2xl p-4 shadow-sm">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div>
+        <p class="text-xs text-gray-500">Meta Septiembre</p>
+        <div class="flex items-end gap-2">
+          <p id="kMeta" class="text-2xl font-semibold">180</p>
+          <input id="iMeta" type="number" value="180" class="no-print w-24 text-sm border rounded-lg px-2 py-1"/>
+        </div>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Hechas a la fecha</p>
+        <div class="flex items-end gap-2">
+          <p id="kHechas" class="text-2xl font-semibold">59</p>
+          <input id="iHechas" type="number" value="59" class="no-print w-24 text-sm border rounded-lg px-2 py-1 bg-gray-50" readonly/>
+        </div>
+        <p class="text-[11px] text-gray-500">Base real del corte 12/09 por GT (archivo "Ventas al 12 sept.xlsx").</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Faltan</p>
+        <p id="kFaltan" class="text-2xl font-semibold">121</p>
+        <p class="text-[11px] text-gray-500">Se reparte en los días activos</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Días activos restantes</p>
+        <p id="kDias" class="text-2xl font-semibold">0</p>
+        <p class="text-[11px] text-gray-500">Desde hoy · sin domingos ni 18–19</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Requerido diario promedio</p>
+        <p id="kDiario" class="text-2xl font-semibold">0</p>
+        <p class="text-[11px] text-gray-500">Se compensa con días fuertes</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filtros -->
+  <section class="bg-white rounded-2xl p-4 shadow-sm">
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Responsable GT</label>
+        <select id="fGT" class="border rounded-xl px-3 py-2 text-sm min-w-[14rem]"></select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Ciudad</label>
+        <select id="fCity" class="border rounded-xl px-3 py-2 text-sm min-w-[12rem]"></select>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="fOnlyStrong" type="checkbox" class="rounded"/>
+        <label for="fOnlyStrong" class="text-sm">Solo días fuertes</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="fHideClosed" type="checkbox" class="rounded" checked/>
+        <label for="fHideClosed" class="text-sm">Ocultar días cerrados</label>
+      </div>
+      <div class="ml-auto text-right flex items-end gap-2">
+        <div>
+          <label class="block text-xs text-gray-500 mb-1">Reasignar “Pool” a</label>
+          <select id="fPoolAssign" class="border rounded-xl px-3 py-2 text-sm min-w-[12rem]"></select>
+        </div>
+        <button id="btnResetFiltros" class="px-3 py-2 rounded-xl border text-xs">Reset filtros</button>
+        <div>
+          <p class="text-xs text-gray-500">Semana</p>
+          <select id="fWeek" class="border rounded-xl px-3 py-2 text-sm min-w-[10rem]"></select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Resumen por GT -->
+  <section id="resumenGT" class="grid gap-4 lg:grid-cols-3"></section>
+  <div id="resumenEmpty" class="hidden text-sm text-gray-500 bg-white rounded-2xl p-4 shadow-sm">No hay datos para mostrar en el resumen.</div>
+
+  <!-- Planner por semana -->
+  <section id="semanas" class="space-y-6"></section>
+  <div id="semanasEmpty" class="hidden text-sm text-gray-500 bg-white rounded-2xl p-4 shadow-sm">No hay días que cumplan con los filtros actuales.</div>
+
+  <footer class="py-8 text-center text-xs text-gray-500">Planner con base real importable. Ajusta la meta; las hechas provienen del corte.</footer>
+</main>
+
+<script>
+  // ==== Catálogos (Ciudad -> GT) y etiquetas
+  const GT_BY_CITY = { 'SCL':'Jeannette', 'OSO':'Gloria', 'TAL':'Gloria', 'CON':'Paola', 'VIÑ':'Xiomara', 'PM':'Nelson', 'LS':'Claudia', 'OTR':'Pool' };
+  const CITY_LABEL = { 'SCL':'Santiago', 'OSO':'Osorno', 'CON':'Concepción', 'VIÑ':'Viña', 'PM':'Pto. Montt', 'TAL':'Talca', 'LS':'La Serena', 'OTR':'Otros' };
+
+  // Base real (corte 12/09) — suma 59
+  const INIT_GT_DONE = { 'Jeannette':11, 'Gloria':9, 'Paola':6, 'Xiomara':10, 'Claudia':6, 'Nelson':0, 'Pool':17 };
+
+  // Calendario (9–30 sep)
+  const DAYS = [
+    { d:'2025-09-09', name:'Mar 9',  goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':2, 'OTR':1} },
+    { d:'2025-09-10', name:'Mié 10', goal:11, tag:'fuerte', alloc:{'SCL':5, 'OSO':2, 'CON':2, 'OTR':2} },
+    { d:'2025-09-11', name:'Jue 11', goal:11, tag:'fuerte', alloc:{'SCL':5, 'OSO':2, 'CON':2, 'OTR':2} },
+    { d:'2025-09-12', name:'Vie 12', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':2, 'CON':2, 'VIÑ':1, 'OTR':2} },
+    { d:'2025-09-13', name:'Sáb 13', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':1, 'VIÑ':1, 'OTR':1} },
+    { d:'2025-09-14', name:'Dom 14', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-15', name:'Lun 15', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-16', name:'Mar 16', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-17', name:'Mié 17', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'PM':1, 'TAL':1, 'OTR':1} },
+    { d:'2025-09-18', name:'Jue 18', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-19', name:'Vie 19', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-20', name:'Sáb 20', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-21', name:'Dom 21', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-22', name:'Lun 22', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'OTR':1} },
+    { d:'2025-09-23', name:'Mar 23', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-24', name:'Mié 24', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-25', name:'Jue 25', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-26', name:'Vie 26', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-27', name:'Sáb 27', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':1, 'VIÑ':1, 'PM':1} },
+    { d:'2025-09-28', name:'Dom 28', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-29', name:'Lun 29', goal:11, tag:'remate', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':2, 'LS':1, 'OTR':1} },
+    { d:'2025-09-30', name:'Mar 30', goal:11, tag:'remate', alloc:{'SCL':2, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':2, 'OTR':2} }
+  ];
+
+  // ==== Estado y persistencia
+  const STORAGE_KEY='planner-sep-new-v2';
+  const state={ meta:180, hechas:59, falt:121, perDayDone:{}, initGtDone:null, poolAssign:'Pool' };
+  function load(){ try{ const r=localStorage.getItem(STORAGE_KEY); if(r) Object.assign(state, JSON.parse(r)); }catch(e){} }
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  // ==== Utilidades y helpers
+  const $ = s=>document.querySelector(s);
+  function dFrom(iso){ const p=String(iso).split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
+  function todayStart(){ const t=new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); }
+  function classForTag(tag){ return tag==='fuerte'?'bg-emerald-50 border-emerald-200': tag==='debil'?'bg-amber-50 border-amber-200': tag==='remate'?'bg-indigo-50 border-indigo-200': 'bg-gray-50 border-gray-200 opacity-60'; }
+  function badge(tag){ const map={fuerte:['Fuerte','bg-emerald-100'],debil:['Débil','bg-amber-100'],cerrado:['Cerrado','bg-gray-200'],remate:['Remate','bg-indigo-100']}; const [t,c]=map[tag]||['','bg-gray-100']; return `<span class="px-2 py-0.5 rounded-full text-xs ${c}">${t}</span>`; }
+  function weekOf(dISO){ const d=dFrom(dISO); const day=d.getDate(); if(day<=13) return 37; if(day<=20) return 38; if(day<=27) return 39; return 40; }
+
+  // ==== KPIs
+  function refreshKPIs(){
+    const meta=Number($('#iMeta').value||state.meta);
+    const hechas=Number($('#iHechas').value||state.hechas);
+    const t=todayStart();
+    const activos=DAYS.filter(x=> dFrom(x.d)>=t && x.tag!=='cerrado').length;
+    const falt=Math.max(0, meta-hechas);
+    $('#kMeta').textContent=meta; $('#kHechas').textContent=hechas; $('#kFaltan').textContent=falt; $('#kDias').textContent=activos; $('#kDiario').textContent=activos? Math.ceil(falt/activos):0;
+    state.meta=meta; state.hechas=hechas; state.falt=falt; save();
+  }
+
+  // ==== Filtros
+  function populateFilters(){
+    const selGT=$('#fGT'); const allGT=[...new Set(Object.values(GT_BY_CITY))];
+    selGT.innerHTML='<option value="">Todos los GT</option>'+allGT.map(n=>`<option>${n}</option>`).join('');
+    function fillCities(gt){ const selCity=$('#fCity'); const keys=Object.keys(CITY_LABEL).filter(c=> !gt || GT_BY_CITY[c]===gt); selCity.innerHTML='<option value="">Todas las ciudades</option>'+keys.map(k=>`<option value="${k}">${CITY_LABEL[k]}</option>`).join(''); }
+    fillCities('');
+    const selWeek=$('#fWeek'); selWeek.innerHTML='<option value="">Todas</option>'+['Semana 37 (9–13)','Semana 38 (15–20)','Semana 39 (22–27)','Semana 40 (29–30)'].map((t,i)=>`<option value="${i+37}">${t}</option>`).join('');
+    // Pool assign selector
+    const selPool=$('#fPoolAssign'); selPool.innerHTML=['Pool',...allGT.filter(g=>g!=='Pool')].map(n=>`<option ${state.poolAssign===n?'selected':''}>${n}</option>`).join('');
+    selPool.addEventListener('change', ()=>{ state.poolAssign=selPool.value; save(); renderSemanas(); renderResumenGT(); });
+    selGT.addEventListener('change', ()=>{ fillCities(selGT.value); renderSemanas(); renderResumenGT(); });
+  }
+
+  // ==== Resumen por GT
+  function renderResumenGT(){
+    const wrap=$('#resumenGT'); const empty=$('#resumenEmpty'); wrap.innerHTML='';
+    const t=todayStart();
+    const selGT=$('#fGT').value; const selCity=$('#fCity').value; const onlyStrong=$('#fOnlyStrong').checked; const hideClosed=$('#fHideClosed').checked; const wk=$('#fWeek').value;
+    const future=DAYS.filter(x=>{ if(dFrom(x.d)<t) return false; if(wk && weekOf(x.d)!==Number(wk)) return false; if(onlyStrong && !(x.tag==='fuerte'||x.tag==='remate')) return false; if(hideClosed && x.tag==='cerrado') return false; return true; });
+
+    const goalRestRaw={};
+    future.forEach(d=>{
+      Object.entries(d.alloc).forEach(([city,qty])=>{
+        if(selCity && city!==selCity) return;
+        let gt=GT_BY_CITY[city];
+        if(gt==='Pool' && state.poolAssign && state.poolAssign!=='Pool'){ gt = state.poolAssign; }
+        if(selGT && gt!==selGT) return;
+        goalRestRaw[gt]=(goalRestRaw[gt]||0)+Number(qty||0);
+      });
+    });
+
+    const totalRestRaw=Object.values(goalRestRaw).reduce((s,v)=>s+v,0);
+    const factor= totalRestRaw? (state.falt/totalRestRaw) : 1;
+    const goalRest=Object.fromEntries(Object.entries(goalRestRaw).map(([k,v])=>[k, Math.max(0, Math.round(v*factor))]));
+
+    const doneRest={};
+    future.forEach(d=>{
+      const done=Number(state.perDayDone[d.d]||0); if(!done) return;
+      const allocFiltered=Object.fromEntries(Object.entries(d.alloc).filter(([city])=>{
+        if(selCity && city!==selCity) return false;
+        let gt=GT_BY_CITY[city]; if(gt==='Pool' && state.poolAssign && state.poolAssign!=='Pool'){ gt = state.poolAssign; }
+        if(selGT && gt!==selGT) return false; return true; }));
+      const sum=Object.values(allocFiltered).reduce((s,v)=>s+Number(v||0),0); if(!sum) return;
+      Object.entries(allocFiltered).forEach(([city,qty])=>{ let gt=GT_BY_CITY[city]; if(gt==='Pool' && state.poolAssign && state.poolAssign!=='Pool'){ gt = state.poolAssign; } doneRest[gt]=(doneRest[gt]||0)+ done*(qty/sum); });
+    });
+
+    let gts=[...new Set(Object.values(GT_BY_CITY))]; if(selGT) gts=[selGT]; if(selCity && !selGT){ gts=[GT_BY_CITY[selCity]]; }
+    if(!gts.length){ empty.classList.remove('hidden'); return; } else empty.classList.add('hidden');
+
+    // Ajustar base con reasignación de Pool si aplica
+    const baseRaw = state.initGtDone || INIT_GT_DONE;
+    const baseInit = { ...baseRaw };
+    if(state.poolAssign && state.poolAssign!=='Pool'){
+      baseInit[state.poolAssign] = (baseInit[state.poolAssign]||0) + (baseInit['Pool']||0);
+      baseInit['Pool'] = 0;
+    }
+
+    gts.forEach(gt=>{
+      const init=Math.round(baseInit[gt]||0);
+      const restGoal=Math.round(goalRest[gt]||0);
+      const restDone=Math.round(doneRest[gt]||0);
+      const goalMonth=init+restGoal; const doneMonth=init+restDone;
+      const pend=Math.max(0, goalMonth-doneMonth);
+      const pct=goalMonth? Math.min(100, Math.round(doneMonth/goalMonth*100)) : 0;
+      const cities=Object.entries(GT_BY_CITY).filter(([c,g])=>g===gt && (!selCity || c===selCity)).map(([c])=>CITY_LABEL[c]).join(', ');
+      const card=document.createElement('div'); card.className='bg-white rounded-2xl p-4 shadow-sm';
+      card.innerHTML=`<div class="flex items-start justify-between"><h3 class="font-semibold">${gt}</h3><span class="text-xs text-gray-500">Meta mes: ${goalMonth}</span></div>
+      <div class="mt-2 h-2 bg-gray-100 rounded-full"><div class="h-2 bg-gray-900 rounded-full" style="width:${pct}%"></div></div>
+      <div class="mt-2 text-sm flex justify-between text-gray-600"><span>Hechas: <strong>${doneMonth}</strong> (base ${init} + resto ${restDone})</span><span>Pend.: <strong>${pend}</strong></span></div>
+      <p class="text-[11px] text-gray-500 mt-1">Resto (esc.): ${restDone} / ${restGoal}</p>
+      <p class="text-xs text-gray-500 mt-1">Ciudades: ${cities||'—'}</p>`;
+      wrap.appendChild(card);
+    });
+  }
+
+  // ==== Planner por semanas
+  function renderSemanas(){
+    const cont=$('#semanas'); const empty=$('#semanasEmpty'); cont.innerHTML=''; let printed=0;
+    const selGT=$('#fGT').value; const selCity=$('#fCity').value; const onlyStrong=$('#fOnlyStrong').checked; const hideClosed=$('#fHideClosed').checked; const wk=$('#fWeek').value;
+    const t=todayStart(); const future=DAYS.filter(x=> dFrom(x.d)>=t && (!wk || weekOf(x.d)===Number(wk)) && (!onlyStrong || (x.tag==='fuerte'||x.tag==='remate')) && (!hideClosed || x.tag!=='cerrado'));
+    const totalRestRaw=future.reduce((s,d)=>s+Number(d.goal||0),0); const factor= totalRestRaw? (state.falt/totalRestRaw) : 1;
+    const groups={}; future.forEach(d=>{ const w=weekOf(d.d); (groups[w]=groups[w]||[]).push(d); });
+    Object.keys(groups).sort().forEach(w=>{ const arr=groups[w]; const sec=document.createElement('div'); sec.className='bg-white rounded-2xl p-4 shadow-sm'; sec.innerHTML=`<div class=\"flex items-center justify-between mb-3\"><h3 class=\"font-semibold\">Semana ${w}</h3><span class=\"text-xs text-gray-500\">${arr[0].name} → ${arr[arr.length-1].name}</span></div>`; const grid=document.createElement('div'); grid.className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3'; arr.forEach(day=>{ const cities=Object.keys(day.alloc); if(selCity && !cities.includes(selCity)) return; if(selGT){ const match=cities.some(c=> GT_BY_CITY[c]===selGT); if(!match) return; } const dayGoal=Math.max(0, Math.round(Number(day.goal||0)*factor)); const chips=Object.entries(day.alloc).map(([c,q])=>{ const v=Math.max(0, Math.round(Number(q||0)*factor)); const gt=GT_BY_CITY[c]; return `<span class='chip'>${CITY_LABEL[c]} · <b>${v}</b> <span class='text-[10px] text-gray-500'>(${gt})</span></span>`; }).join(' '); const done=Number(state.perDayDone[day.d]||0); const pct= dayGoal? Math.min(100, Math.round(done/dayGoal*100)) : 0; const card=document.createElement('div'); card.className=`border rounded-2xl p-3 ${classForTag(day.tag)}`; card.innerHTML=`<div class=\"flex items-start justify-between gap-3\"><div><p class=\"text-xs text-gray-500\">${badge(day.tag)}</p><h4 class=\"font-semibold mt-1\">${day.name}</h4></div><div class=\"text-right\"><p class=\"text-xs text-gray-500\">Objetivo</p><p class=\"text-lg font-semibold\">${dayGoal}</p></div></div>
+      <div class=\"mt-2 flex flex-wrap gap-1\">${chips||'<span class=\"text-xs text-gray-400\">—</span>'}</div>
+      <div class=\"mt-3\"><div class=\"h-2 rounded-full bg-gray-100\"><div class=\"h-2 rounded-full bg-gray-900\" style=\"width:${pct}%\"></div></div>
+      <div class=\"mt-2 flex items-center justify-between text-sm\"><div class=\"flex items-center gap-2\"><button class=\"no-print w-6 h-6 rounded border\" data-dec=\"${day.d}\">−</button><input class=\"w-16 text-right border rounded px-2 py-1\" type=\"number\" value=\"${done}\" data-val=\"${day.d}\"/><button class=\"no-print w-6 h-6 rounded border\" data-inc=\"${day.d}\">+</button></div><span class=\"text-xs text-gray-500\">Hechas hoy: ${done} · ${pct}%</span></div></div>`; grid.appendChild(card); printed++; }); if(grid.children.length){ sec.appendChild(grid); cont.appendChild(sec); } }); if(!printed) empty.classList.remove('hidden'); else empty.classList.add('hidden');
+  }
+
+  // ==== Importador (XLSX/XLS/CSV)
+  function setupImport(){
+    $('#btnImport').addEventListener('click', ()=> $('#fileImport').click());
+    $('#fileImport').addEventListener('change', async (ev)=>{
+      const file = ev.target.files[0]; if(!file) return;
+      try{
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+        let wb;
+        if(isCSV){
+          const text = await file.text(); wb = XLSX.read(text, { type:'string' });
+        }else{
+          const data = await file.arrayBuffer(); wb = XLSX.read(data, { type:'array' });
+        }
+        const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(ws, { defval:null });
+        const findCol=(posibles)=>{ return (rows.length? Object.keys(rows[0]) : []).find(c=> posibles.includes(String(c).toLowerCase())); };
+        const colFecha = findCol(['fecha','date','día','dia']);
+        const colGT    = findCol(['responsable gt','gt','responsable']);
+        const colCiudad= findCol(['ciudad','city']);
+        const sepStart = new Date(2025,8,1), octStart = new Date(2025,9,1);
+        const doneByGT = {};
+        function mapCity(cv){ const v=String(cv||'').toLowerCase(); if(v.includes('santiago')) return 'SCL'; if(v.includes('osorno')) return 'OSO'; if(v.includes('concepción')||v.includes('concepcion')) return 'CON'; if(v.includes('viña')||v.includes('vina')||v.includes('valpara')||v.includes('quillota')||v.includes('san felipe')) return 'VIÑ'; if(v.includes('puerto montt')) return 'PM'; if(v.includes('talca')||v.includes('curic')) return 'TAL'; if(v.includes('serena')||v.includes('coquimbo')) return 'LS'; return 'OTR'; }
+        function parseXlsDate(val){ if(val==null) return null; if(typeof val==='number'){ const epoch=new Date(Date.UTC(1899,11,30)); return new Date(epoch.getTime()+val*86400000); } const d=new Date(val); return isNaN(d)? null : d; }
+        rows.forEach(r=>{ let f=parseXlsDate(colFecha? r[colFecha]:null); if(!f) return; if(!(f>=sepStart && f<octStart)) return; let gt=colGT? r[colGT]:null; if(!gt){ const code=mapCity(r[colCiudad]); gt=GT_BY_CITY[code]; } if(!gt) gt='Pool'; const name=String(gt).trim(); doneByGT[name]=(doneByGT[name]||0)+1; });
+        const total = Object.values(doneByGT).reduce((s,v)=>s+v,0);
+        state.initGtDone = doneByGT; state.hechas = total; state.falt = Math.max(0, Number($('#iMeta').value||state.meta) - total); $('#iHechas').value=total; save(); refreshKPIs(); renderResumenGT(); renderSemanas();
+      }catch(err){ console.error(err); alert('No se pudo leer el archivo (XLSX/XLS/CSV)'); }
+    });
+  }
+
+  // ==== Eventos
+  function bind(){
+    $('#btnPrint').addEventListener('click', ()=> window.print());
+    $('#btnPdf').addEventListener('click', ()=>{ try{ html2pdf().set({ filename:'Planner_Septiembre.pdf', margin:10, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(document.querySelector('main')).save(); }catch(e){ alert('No se pudo generar PDF'); } });
+    $('#btnReset').addEventListener('click', ()=>{ if(!confirm('¿Resetear planner?')) return; localStorage.removeItem(STORAGE_KEY); state.perDayDone={}; state.initGtDone=null; state.meta=180; state.hechas=59; state.falt=Math.max(0,180-59); $('#iMeta').value=state.meta; $('#iHechas').value=state.hechas; refreshKPIs(); renderResumenGT(); renderSemanas(); });
+    $('#btnResetFiltros').addEventListener('click', ()=>{ $('#fGT').value=''; $('#fCity').value=''; $('#fOnlyStrong').checked=false; $('#fHideClosed').checked=true; $('#fWeek').value=''; renderSemanas(); renderResumenGT(); });
+    ['fGT','fCity','fOnlyStrong','fHideClosed','fWeek'].forEach(id=> document.getElementById(id).addEventListener('change', ()=>{ renderSemanas(); renderResumenGT(); }));
+    ['iMeta'].forEach(id=> document.getElementById(id).addEventListener('input', ()=>{ refreshKPIs(); renderResumenGT(); renderSemanas(); }));
+    document.body.addEventListener('click', (e)=>{ const inc=e.target.getAttribute('data-inc'); const dec=e.target.getAttribute('data-dec'); if(inc){ state.perDayDone[inc]=(Number(state.perDayDone[inc]||0))+1; save(); renderSemanas(); renderResumenGT(); } if(dec){ state.perDayDone[dec]=Math.max(0,(Number(state.perDayDone[dec]||0))-1); save(); renderSemanas(); renderResumenGT(); } });
+    document.body.addEventListener('input', (e)=>{ const key=e.target.getAttribute('data-val'); if(!key) return; state.perDayDone[key]=Number(e.target.value||0); save(); renderSemanas(); renderResumenGT(); });
+  }
+
+  // ==== Init
+  document.addEventListener('DOMContentLoaded', ()=>{
+    load();
+    $('#iMeta').value=state.meta; $('#iHechas').value=state.hechas;
+    refreshKPIs();
+    populateFilters();
+    renderResumenGT();
+    renderSemanas();
+    setupImport();
+    bind();
+
+    // ==== Self-tests mínimos ("test cases") ====
+    try{
+      const totalBase = Object.values(INIT_GT_DONE).reduce((a,b)=>a+Number(b||0),0);
+      console.assert(totalBase===59, 'La base por GT no suma 59');
+      console.assert(document.getElementById('fGT') && document.getElementById('fCity') && document.getElementById('fWeek'), 'Filtros no están presentes');
+      console.assert(typeof setupImport==='function' && typeof renderSemanas==='function' && typeof renderResumenGT==='function', 'Funciones clave no disponibles');
+    }catch(_){/* no-op */}
+  });
+</script>
+</body>
+</html>
