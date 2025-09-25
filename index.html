@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Planner SEP — Corte 09 (definitivo)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+  <style>
+    @media print{.no-print{display:none!important}}
+    .chip{border:1px solid rgba(0,0,0,.08); background:#fff; border-radius:999px; padding:.15rem .5rem; font-size:.75rem}
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+<header class="sticky top-0 z-30 bg-white/90 backdrop-blur border-b">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 rounded-2xl bg-gray-900 text-white flex items-center justify-center text-sm font-semibold">PL</div>
+      <div>
+        <h1 class="text-lg sm:text-xl font-semibold">Planner SEPTIEMBRE — Proyección a Cierre</h1>
+        <p class="text-xs text-gray-500">Feriados 18–19 cerrados · Domingos no operan · Días débiles: 15, 16, 20</p>
+      </div>
+    </div>
+    <div class="no-print flex items-center gap-2">
+      <button id="btnPdf" class="px-3 py-1.5 rounded-xl border text-xs">Descargar PDF</button>
+      <button id="btnPrint" class="px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs">Imprimir</button>
+      <button id="btnReset" class="px-3 py-1.5 rounded-xl border text-xs">Reiniciar</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-6 space-y-6">
+  <!-- KPIs -->
+  <section class="bg-white rounded-2xl p-4 shadow-sm">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div>
+        <p class="text-xs text-gray-500">Meta Septiembre</p>
+        <div class="flex items-end gap-2">
+          <p id="kMeta" class="text-2xl font-semibold">180</p>
+          <input id="iMeta" type="number" value="180" class="no-print w-24 text-sm border rounded-lg px-2 py-1"/>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">Cumplimiento total</p>
+        <p id="kPctTotal" class="text-3xl font-bold">0%</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Hechas a la fecha</p>
+        <div class="flex items-end gap-2">
+          <p id="kHechas" class="text-2xl font-semibold">89</p>
+          <input id="iHechas" type="number" value="89" class="no-print w-24 text-sm border rounded-lg px-2 py-1 bg-gray-50" readonly/>
+        </div>
+        <p class="text-[11px] text-gray-500">Base real del corte 24/09 por GT (archivo "Ventas al 24-09-25.xlsx").</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Faltan</p>
+        <p id="kFaltan" class="text-2xl font-semibold">117</p>
+        <p class="text-[11px] text-gray-500">Se reparte en los días activos</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Días activos restantes</p>
+        <p id="kDias" class="text-2xl font-semibold">0</p>
+        <p class="text-[11px] text-gray-500">Desde hoy · sin domingos ni 18–19</p>
+      </div>
+      <div>
+        <p class="text-xs text-gray-500">Requerido diario promedio</p>
+        <p id="kDiario" class="text-2xl font-semibold">0</p>
+        <p class="text-[11px] text-gray-500">Se compensa con días fuertes</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Filtros -->
+  <section class="bg-white rounded-2xl p-4 shadow-sm">
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Responsable GT</label>
+        <select id="fGT" class="border rounded-xl px-3 py-2 text-sm min-w-[14rem]"></select>
+      </div>
+      <div>
+        <label class="block text-xs text-gray-500 mb-1">Ciudad</label>
+        <select id="fCity" class="border rounded-xl px-3 py-2 text-sm min-w-[12rem]"></select>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="fOnlyStrong" type="checkbox" class="rounded"/>
+        <label for="fOnlyStrong" class="text-sm">Solo días fuertes</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <input id="fHideClosed" type="checkbox" class="rounded" checked/>
+        <label for="fHideClosed" class="text-sm">Ocultar días cerrados</label>
+      </div>
+      <div class="ml-auto text-right flex items-end gap-2">
+        <button id="btnResetFiltros" class="px-3 py-2 rounded-xl border text-xs">Reset filtros</button>
+        <div>
+          <p class="text-xs text-gray-500">Semana</p>
+          <select id="fWeek" class="border rounded-xl px-3 py-2 text-sm min-w-[10rem]"></select>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Resumen por GT -->
+  <section id="resumenGT" class="grid gap-4 lg:grid-cols-3"></section>
+  <div id="resumenEmpty" class="hidden text-sm text-gray-500 bg-white rounded-2xl p-4 shadow-sm">No hay datos para mostrar en el resumen.</div>
+
+  <!-- Planner por semana -->
+  <section id="semanas" class="space-y-6"></section>
+  <div id="semanasEmpty" class="hidden text-sm text-gray-500 bg-white rounded-2xl p-4 shadow-sm">No hay días que cumplan con los filtros actuales.</div>
+
+  <footer class="py-8 text-center text-xs text-gray-500">Planner con base real al 24/09. Ajusta la meta; las hechas provienen del corte.</footer>
+</main>
+
+<script>
+  // ==== Catálogos y datos base ====
+  const GT_BY_CITY = { 'SCL':'Jeannette', 'OSO':'Gloria', 'TAL':'Gloria', 'CON':'Paola', 'VIÑ':'Xiomara', 'PM':'Nelson', 'LS':'Claudia', 'OTR':'Pool' };
+  const CITY_LABEL = { 'SCL':'Santiago', 'OSO':'Osorno', 'CON':'Concepción', 'VIÑ':'Viña', 'PM':'Pto. Montt', 'TAL':'Talca', 'LS':'La Serena', 'OTR':'Otros' };
+  const INIT_GT_DONE = { 'Jeannette':12, 'Gloria':11, 'Paola':6, 'Xiomara':11, 'Claudia':5, 'Nelson':0, 'Pool':18 };
+  const CUT_DATE = '2025-09-24';
+  const GT_LIST = [...new Set(Object.values(GT_BY_CITY))].filter(g=>g!=='Pool');
+  const GT_RESPONSABLES = ['Jeannette','Gloria','Paola','Xiomara','Nelson','Claudia'];
+
+  // Calendario plan (9–30 sep)
+  const DAYS = [
+    { d:'2025-09-09', name:'Mar 9',  goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':2, 'OTR':1} },
+    { d:'2025-09-10', name:'Mié 10', goal:11, tag:'fuerte', alloc:{'SCL':5, 'OSO':2, 'CON':2, 'OTR':2} },
+    { d:'2025-09-11', name:'Jue 11', goal:11, tag:'fuerte', alloc:{'SCL':5, 'OSO':2, 'CON':2, 'OTR':2} },
+    { d:'2025-09-12', name:'Vie 12', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':2, 'CON':2, 'VIÑ':1, 'OTR':2} },
+    { d:'2025-09-13', name:'Sáb 13', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':1, 'VIÑ':1, 'OTR':1} },
+    { d:'2025-09-14', name:'Dom 14', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-15', name:'Lun 15', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-16', name:'Mar 16', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-17', name:'Mié 17', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'PM':1, 'TAL':1, 'OTR':1} },
+    { d:'2025-09-18', name:'Jue 18', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-19', name:'Vie 19', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-20', name:'Sáb 20', goal:4,  tag:'debil',  alloc:{'SCL':2, 'OSO':1, 'CON':1} },
+    { d:'2025-09-21', name:'Dom 21', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-22', name:'Lun 22', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'OTR':1} },
+    { d:'2025-09-23', name:'Mar 23', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-24', name:'Mié 24', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-25', name:'Jue 25', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-26', name:'Vie 26', goal:11, tag:'fuerte', alloc:{'SCL':4, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':1, 'OTR':1} },
+    { d:'2025-09-27', name:'Sáb 27', goal:8,  tag:'fuerte', alloc:{'SCL':3, 'OSO':2, 'CON':1, 'VIÑ':1, 'PM':1} },
+    { d:'2025-09-28', name:'Dom 28', goal:0,  tag:'cerrado', alloc:{} },
+    { d:'2025-09-29', name:'Lun 29', goal:11, tag:'remate', alloc:{'SCL':3, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':2, 'LS':1, 'OTR':1} },
+    { d:'2025-09-30', name:'Mar 30', goal:11, tag:'remate', alloc:{'SCL':2, 'OSO':1, 'CON':1, 'VIÑ':1, 'PM':1, 'TAL':1, 'LS':2, 'OTR':2} }
+  ];
+
+  // ==== Estado ====
+  const STORAGE_KEY = 'planner-sep-definitivo-v5';
+  const state = { meta:180, hechas:89, perDayDone:{}, perDayGT:null };
+  function load(){ try{ const raw=localStorage.getItem(STORAGE_KEY); if(raw) Object.assign(state, JSON.parse(raw)); }catch(e){} }
+  function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+  // ==== Utils ====
+  const $ = s=>document.querySelector(s);
+  function dFrom(iso){ const p=iso.split('-').map(Number); return new Date(p[0], p[1]-1, p[2]); }
+  function todayStart(){ const t=new Date(); return new Date(t.getFullYear(), t.getMonth(), t.getDate()); }
+  function classForTag(tag){ return tag==='fuerte'?'bg-emerald-50 border-emerald-200': tag==='debil'?'bg-amber-50 border-amber-200': tag==='remate'?'bg-indigo-50 border-indigo-200': 'bg-gray-50 border-gray-200 opacity-60'; }
+  function badge(tag){ const map={fuerte:['Fuerte','bg-emerald-100'],debil:['Débil','bg-amber-100'],cerrado:['Cerrado','bg-gray-200'],remate:['Remate','bg-indigo-100']}; const [t,c]=map[tag]||['','bg-gray-100']; return `<span class="px-2 py-0.5 rounded-full text-xs ${c}">${t}</span>`; }
+  function weekOf(dISO){ const d=dFrom(dISO); const day=d.getDate(); if(day<=13) return 37; if(day<=20) return 38; if(day<=27) return 39; return 40; }
+
+  // ==== Helpers para distribución histórica ====
+  function sumVals(obj){ return Object.values(obj||{}).reduce((s,v)=> s + Number(v||0), 0); }
+  function apportion(total, weights){
+    const n=weights.length; if(total<=0||n===0) return Array(n).fill(0);
+    const S = weights.reduce((a,b)=>a+Number(b||0),0) || n;
+    const quotas = weights.map(w=> total * (Number(w||0)||1) / S);
+    const base = quotas.map(q=> Math.floor(q));
+    let assigned = base.reduce((a,b)=>a+b,0), left = total - assigned;
+    const order = quotas.map((q,i)=>({i, r:q - base[i]})).sort((a,b)=> b.r - a.r);
+    for(let k=0; k<order.length && left>0; k++){ base[order[k].i]++; left--; }
+    return base;
+  }
+  // Distribuye alloc (por ciudad) a nivel GT, eliminando Pool/OTR al repartir entre los 6 responsables.
+  function allocToGT(alloc, cityFilter){
+    const map={};
+    const entries = Object.entries(alloc).filter(([city])=> !cityFilter || city===cityFilter);
+    // Sumar GT directos (distintos de Pool)
+    entries.forEach(([city,qty])=>{ const gt = GT_BY_CITY[city]; if(gt && gt!=='Pool') map[gt]=(map[gt]||0)+Number(qty||0); });
+    // Repartir OTR entre responsables usando pesos del propio día (si no hay, uniforme)
+    const otros = entries.find(([city])=> city==='OTR');
+    if(otros){
+      const qOTR = Number(otros[1]||0);
+      const weights = GT_RESPONSABLES.map(gt=> Number(map[gt]||0));
+      const hasW = weights.some(w=> w>0);
+      const wEff = hasW? weights : GT_RESPONSABLES.map(_=>1);
+      const parts = apportion(qOTR, wEff);
+      GT_RESPONSABLES.forEach((gt,i)=>{ if(parts[i]>0) map[gt]=(map[gt]||0)+parts[i]; });
+    }
+    return map;
+  }
+
+  function seedHistoricalIfNeeded(){
+    // Recalcula histórico diario para que la suma coincida con "hechas" del corte
+    const iHechasEl = document.getElementById('iHechas');
+    const targetHechas = Number(iHechasEl ? iHechasEl.value : (state.hechas||0));
+    const cutoffParts = CUT_DATE.split('-').map(Number);
+    const cutoff = new Date(cutoffParts[0], cutoffParts[1]-1, cutoffParts[2]);
+    const daysPast = DAYS.filter(x=> dFrom(x.d) <= cutoff);
+
+    if(!daysPast.length){ state.perDayGT = {}; state.perDayDone={}; save(); return; }
+
+    // Si ya existe y suma lo mismo, mantener
+    if(state.perDayGT && Object.keys(state.perDayGT).length){
+      const seededTotal = Object.entries(state.perDayGT).reduce((S,[,m])=> S + sumVals(m), 0);
+      if(seededTotal === targetHechas) return;
+    }
+
+    // 1) Construir pesos por GT para el total (usando alloc agregada en días pasados)
+    const totalWeightGT = {}; // {gt: peso}
+    const dayWeightsByGT = {}; // {gt: [w_d1, w_d2, ...]}
+    GT_RESPONSABLES.forEach(gt=>{
+      const wDays = daysPast.map(d=>{ const map = allocToGT(d.alloc, null); return Number(map[gt]||0); });
+      dayWeightsByGT[gt] = wDays;
+      totalWeightGT[gt] = wDays.reduce((a,b)=>a+Number(b||0),0);
+    });
+
+    const weightsGT = GT_RESPONSABLES.map(gt=> totalWeightGT[gt]||1);
+    const partsGT = apportion(targetHechas, weightsGT);
+
+    // 2) Repartir por día según pesos diarios del GT (si no hay, uniforme)
+    const perDayGT = {}; daysPast.forEach(d=> perDayGT[d.d] = {});
+    GT_RESPONSABLES.forEach((gt,idx)=>{
+      const totalGT = partsGT[idx]||0; if(totalGT<=0) return;
+      const wDays = dayWeightsByGT[gt]; const hasWd = wDays.some(x=> Number(x)>0); const wEff = hasWd? wDays : daysPast.map(_=>1);
+      const partsDays = apportion(totalGT, wEff);
+      daysPast.forEach((d,i)=>{ const v=partsDays[i]; if(v>0){ perDayGT[d.d][gt]=(perDayGT[d.d][gt]||0)+v; } });
+    });
+
+    // 3) Consolidado por día
+    const perDayDone = {};
+    Object.entries(perDayGT).forEach(([d,map])=>{ perDayDone[d] = sumVals(map); });
+
+    state.perDayGT = perDayGT; state.perDayDone = perDayDone; save();
+  }
+
+  // Helper: init efectivo por GT (suma histórica hasta CUT_DATE, con Pool redistribuido)
+  function computeInitEff(){
+    const res={}; const maps=state.perDayGT||{}; const cut = (function(){ const p=CUT_DATE.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); })();
+    Object.entries(maps).forEach(([d,gtmap])=>{ if(dFrom(d)<=cut){ Object.entries(gtmap).forEach(([g,v])=>{ res[g]=(res[g]||0)+Number(v||0); }); } });
+    if(res['Pool']>0){ delete res['Pool']; }
+    return res;
+  }
+
+  // ==== KPIs ====
+  function refreshKPIs(){
+    const iMetaEl = document.getElementById('iMeta');
+    const iHechasEl = document.getElementById('iHechas');
+    const meta = Number(iMetaEl ? iMetaEl.value : state.meta);
+    const hechas = Number(iHechasEl ? iHechasEl.value : state.hechas);
+    const t=todayStart();
+    const activos = DAYS.filter(x=> dFrom(x.d)>=t && x.tag!=='cerrado').length;
+    const falt = Math.max(0, meta - hechas);
+    const kMetaEl = document.getElementById('kMeta'); if(kMetaEl) kMetaEl.textContent=meta;
+    const kHechasEl = document.getElementById('kHechas'); if(kHechasEl) kHechasEl.textContent=hechas;
+    const kFaltanEl = document.getElementById('kFaltan'); if(kFaltanEl) kFaltanEl.textContent=falt;
+    const kDiasEl = document.getElementById('kDias'); if(kDiasEl) kDiasEl.textContent=activos;
+    const kDiarioEl = document.getElementById('kDiario'); if(kDiarioEl) kDiarioEl.textContent=activos? Math.ceil(falt/activos):0;
+    const elPct=document.getElementById('kPctTotal'); if(elPct){ const pctTotal = meta ? Math.round((hechas/meta)*100) : 0; elPct.textContent=pctTotal + '%'; }
+    state.meta=meta; state.hechas=hechas; save();
+  }
+
+  // ==== Filtros ====
+  function populateFilters(){
+    const selGT=$('#fGT');
+    const allGT=[...GT_RESPONSABLES];
+    selGT.innerHTML='<option value="">Todos los GT</option>' + allGT.map(n=>`<option>${n}</option>`).join('');
+    function fillCities(gt){
+      const selCity=$('#fCity');
+      const keys=Object.keys(CITY_LABEL).filter(c=> !gt || GT_BY_CITY[c]===gt);
+      selCity.innerHTML='<option value="">Todas las ciudades</option>' + keys.map(k=>`<option value="${k}">${CITY_LABEL[k]}</option>`).join('');
+    }
+    fillCities('');
+    const selWeek=$('#fWeek');
+    selWeek.innerHTML='<option value="">Todas</option>' + ['Semana 37 (9–13)','Semana 38 (15–20)','Semana 39 (22–27)','Semana 40 (29–30)'].map((t,i)=>`<option value="${i+37}">${t}</option>`).join('');
+    selGT.addEventListener('change', ()=>{ fillCities(selGT.value); renderSemanas(); renderResumenGT(); });
+  }
+
+  // ==== Resumen por GT ====
+  function renderResumenGT(){
+    const wrap=$('#resumenGT'); const empty=$('#resumenEmpty'); wrap.innerHTML='';
+    const t=todayStart();
+    const selGT=$('#fGT').value; const selCity=$('#fCity').value; const onlyStrong=$('#fOnlyStrong').checked; const hideClosed=$('#fHideClosed').checked; const wk=$('#fWeek').value; const usingWeek= !!wk;
+
+    // Base de días: si hay semana seleccionada, usar esa semana (aunque sea pasada)
+    const daysSel = DAYS.filter(x=>{
+      if(usingWeek){ if(weekOf(x.d)!==Number(wk)) return false; }
+      else { if(dFrom(x.d) < t) return false; }
+      if(onlyStrong && !(x.tag==='fuerte'||x.tag==='remate')) return false;
+      if(hideClosed && x.tag==='cerrado') return false;
+      return true;
+    });
+
+    // Helper para listado de GT a mostrar
+    let gts=[...GT_RESPONSABLES]; if(selGT) gts=[selGT]; if(selCity && !selGT){ const gtCity=GT_BY_CITY[selCity]; if(gtCity && gtCity!=='Pool') gts=[gtCity]; }
+
+    if(usingWeek){
+      // ======= Vista SEMANAL (cumplimiento REAL de la semana seleccionada) =======
+      const weekGoal={};
+      daysSel.forEach(d=>{
+        const gtMap = allocToGT(d.alloc, selCity||null);
+        Object.entries(gtMap).forEach(([gt,qty])=>{ if(selGT && gt!==selGT) return; weekGoal[gt]=(weekGoal[gt]||0)+Number(qty||0); });
+      });
+      const weekDone={};
+      daysSel.forEach(d=>{
+        const map = state.perDayGT? state.perDayGT[d.d] : null;
+        if(map && Object.keys(map).length){
+          if(selCity){
+            const gtWanted = GT_BY_CITY[selCity];
+            if(gtWanted){
+              const sumAllocGT = Object.entries(d.alloc).reduce((s,[city,q])=> s + (GT_BY_CITY[city]===gtWanted? Number(q||0):0), 0);
+              const allocCity = Number(d.alloc[selCity]||0);
+              if(sumAllocGT>0 && allocCity>0){
+                const totalGT = Number(map[gtWanted]||0);
+                const part = totalGT * (allocCity/sumAllocGT);
+                if(!selGT || selGT===gtWanted) weekDone[gtWanted]=(weekDone[gtWanted]||0)+part;
+              }
+            }
+          }else{
+            Object.entries(map).forEach(([gt,val])=>{ if(selGT && gt!==selGT) return; weekDone[gt]=(weekDone[gt]||0)+Number(val||0); });
+          }
+        }else{
+          const done=Number(state.perDayDone[d.d]||0); if(!done) return;
+          const gtWeights = allocToGT(d.alloc, selCity||null);
+          const sum=Object.values(gtWeights).reduce((s,v)=>s+Number(v||0),0); if(!sum) return;
+          Object.entries(gtWeights).forEach(([gt,w])=>{ if(selGT && gt!==selGT) return; weekDone[gt]=(weekDone[gt]||0)+ done*(Number(w)/sum); });
+        }
+      });
+
+      if(!daysSel.length || !gts.length){ empty.classList.remove('hidden'); return; } else empty.classList.add('hidden');
+
+      gts.forEach(gt=>{
+        const goal = Math.round(weekGoal[gt]||0);
+        const done = Math.round(weekDone[gt]||0);
+        const pend = Math.max(0, goal-done);
+        const pct = goal? Math.min(100, Math.round(done/goal*100)) : 0;
+        const cities = Object.entries(GT_BY_CITY).filter(([c,g])=>g===gt && (!selCity || c===selCity)).map(([c])=>CITY_LABEL[c]).join(', ');
+        const card=document.createElement('div'); card.className='bg-white rounded-2xl p-4 shadow-sm';
+        card.innerHTML=`<div class="flex items-start justify-between"><h3 class="font-semibold">${gt}</h3><span class="text-xs text-gray-500">Meta sem. ${wk}: ${goal}</span></div>
+        <div class="mt-2 h-2 bg-gray-100 rounded-full"><div class="h-2 bg-gray-900 rounded-full" style="width:${pct}%"></div></div>
+        <div class="mt-2 text-sm flex justify-between text-gray-600"><span>Hechas sem.: <strong>${done}</strong></span><span>Pend.: <strong>${pend}</strong></span></div>
+        <p class="text-xs text-gray-500 mt-1">Cumplimiento: <strong>${pct}%</strong> (${done}/${goal})</p>
+        <p class="text-xs text-gray-500 mt-1">Ciudades: ${cities||'—'}</p>`;
+        wrap.appendChild(card);
+      });
+      return;
+    }
+
+    // ======= Vista MENSUAL (proyección a cierre desde hoy) =======
+    const goalRestRaw={};
+    daysSel.forEach(d=>{ const gtMap = allocToGT(d.alloc, selCity||null); Object.entries(gtMap).forEach(([gt,qty])=>{ if(selGT && gt!==selGT) return; goalRestRaw[gt]=(goalRestRaw[gt]||0)+Number(qty||0); }); });
+
+    // Denominador GLOBAL (todos los GT)
+    const goalRestAllRaw={};
+    daysSel.forEach(d=>{ const gtMapAll = allocToGT(d.alloc, null); Object.entries(gtMapAll).forEach(([gt,qty])=>{ goalRestAllRaw[gt]=(goalRestAllRaw[gt]||0)+Number(qty||0); }); });
+    const totalRestAll = Object.values(goalRestAllRaw).reduce((s,v)=>s+v,0);
+    const faltGlob = Math.max(0, (Number($('#iMeta').value||state.meta) - Number($('#iHechas').value||state.hechas)));
+    const factorGlobal = totalRestAll ? (faltGlob/totalRestAll) : 1;
+
+    const goalRest = Object.fromEntries(Object.entries(goalRestRaw).map(([k,v])=>[k, Math.max(0, Math.round(v*factorGlobal))]));
+    const doneRest={};
+    daysSel.forEach(d=>{
+      const done=Number(state.perDayDone[d.d]||0); if(!done) return;
+      const gtWeights = allocToGT(d.alloc, selCity||null);
+      const sum=Object.values(gtWeights).reduce((s,v)=>s+Number(v||0),0); if(!sum) return;
+      Object.entries(gtWeights).forEach(([gt,qty])=>{ if(selGT && gt!==selGT) return; doneRest[gt]=(doneRest[gt]||0)+ done*(qty/sum); });
+    });
+
+    if(!gts.length){ empty.classList.remove('hidden'); return; } else empty.classList.add('hidden');
+    const initEffByGT = computeInitEff();
+    gts.forEach(gt=>{
+      const init = Math.round(initEffByGT[gt]||0);
+      const restGoal = Math.round(goalRest[gt]||0);
+      const restDone = Math.round(doneRest[gt]||0);
+      const goalMonth = init + restGoal; const doneMonth = init + restDone; const pend=Math.max(0, goalMonth-doneMonth); const pct=goalMonth? Math.min(100, Math.round(doneMonth/goalMonth*100)) : 0;
+      const cities = Object.entries(GT_BY_CITY).filter(([c,g])=>g===gt && (!selCity || c===selCity)).map(([c])=>CITY_LABEL[c]).join(', ');
+      const card=document.createElement('div'); card.className='bg-white rounded-2xl p-4 shadow-sm';
+      card.innerHTML=`<div class=\"flex items-start justify-between\"><h3 class=\"font-semibold\">${gt}</h3><span class=\"text-xs text-gray-500\">Meta mes: ${goalMonth}</span></div>
+      <div class=\"mt-2 h-2 bg-gray-100 rounded-full\"><div class=\"h-2 bg-gray-900 rounded-full\" style=\"width:${pct}%\"></div></div>
+      <div class=\"mt-2 text-sm flex justify-between text-gray-600\"><span>Hechas: <strong>${doneMonth}</strong></span><span>Pend.: <strong>${pend}</strong></span></div>
+      <p class=\"text-xs text-gray-500 mt-1\">Cumplimiento: <strong>${pct}%</strong> (${doneMonth}/${goalMonth})</p>
+      <p class=\"text-xs text-gray-500 mt-1\">Ciudades: ${cities||'—'}</p>`;
+      wrap.appendChild(card);
+    });
+  }
+
+  // ==== Planner por semanas ====
+  function renderSemanas(){
+    const cont=$('#semanas'); const empty=$('#semanasEmpty'); cont.innerHTML=''; let printed=0;
+    const selGT=$('#fGT').value; const selCity=$('#fCity').value; const onlyStrong=$('#fOnlyStrong').checked; const hideClosed=$('#fHideClosed').checked; const wk=$('#fWeek').value;
+
+    const t=todayStart();
+    // 1) Tomar días futuros (o por semana si se selecciona)
+    const daysBase = DAYS.filter(x=> dFrom(x.d)>=t && (!wk || weekOf(x.d)===Number(wk)) && (!onlyStrong || (x.tag==='fuerte'||x.tag==='remate')) && (!hideClosed || x.tag!=='cerrado'));
+
+    // Helper para filtrar alloc por selección de GT/Ciudad
+    const filterAlloc = (alloc)=>{
+      const out={};
+      Object.entries(alloc).forEach(([city,q])=>{
+        if(selCity && city!==selCity) return;
+        if(selGT){ const gtCity = GT_BY_CITY[city]; if(gtCity!==selGT) return; }
+        out[city]=Number(q||0);
+      });
+      return out;
+    };
+
+    // 2) Calcular el faltante GLOBAL y la participación de la selección
+    const faltGlob=Math.max(0, Number($('#iMeta').value||state.meta) - Number($('#iHechas').value||state.hechas));
+    const totalRestAllRaw = daysBase.reduce((S,d)=> S + Number(d.goal||0), 0); // sin filtros
+    const totalRestRawFiltered = daysBase.reduce((S,d)=>{
+      const allocFilt = filterAlloc(d.alloc);
+      const sumFilt = Object.values(allocFilt).reduce((a,b)=>a+Number(b||0),0);
+      const sumAll  = Object.values(d.alloc).reduce((a,b)=>a+Number(b||0),0) || 1;
+      const share = sumFilt / sumAll; // proporción del objetivo diario que corresponde a la selección
+      return S + (Number(d.goal||0) * share);
+    },0);
+
+    // Pendiente de la SELECCIÓN: misma lógica del resumen mensual -> participación * faltante global
+    const pendSel = totalRestAllRaw>0 ? Math.round(faltGlob * (totalRestRawFiltered / totalRestAllRaw)) : 0;
+
+    // 3) Distribuir pendSel entre los días por pesos (alloc filtrada)
+    const weightsPerDay = daysBase.map(d=> Object.values(filterAlloc(d.alloc)).reduce((a,b)=>a+Number(b||0),0));
+    const partsDays = apportion(pendSel, weightsPerDay.length? weightsPerDay : [1]);
+
+    // 4) Agrupar por semana y renderizar tarjetas
+    const groups={}; daysBase.forEach((d,idx)=>{ const w=weekOf(d.d); (groups[w]=groups[w]||[]).push({day:d, idx}); });
+
+    Object.keys(groups).sort().forEach(w=>{
+      const arr=groups[w]; const sec=document.createElement('div'); sec.className='bg-white rounded-2xl p-4 shadow-sm';
+      sec.innerHTML=`<div class="flex items-center justify-between mb-3"><h3 class="font-semibold">Semana ${w}</h3><span class="text-xs text-gray-500">${arr[0].day.name} → ${arr[arr.length-1].day.name}</span></div>`;
+      const grid=document.createElement('div'); grid.className='grid gap-3 sm:grid-cols-2 lg:grid-cols-3';
+
+      arr.forEach(({day, idx})=>{
+        // Filtrar alloc por selección para este día
+        const allocFilt = filterAlloc(day.alloc);
+        const cities=Object.keys(allocFilt);
+        if(selCity && !cities.includes(selCity)) return; // si se pidió ciudad, debe existir
+        if(selGT && !cities.length) return; // si se pidió GT, debe existir alguna ciudad de ese GT
+
+        // Objetivo del día = parte asignada a este día (entero, cuadra con pendSel)
+        const dayGoal = partsDays[idx]||0;
+
+        // Chips: repartir dayGoal entre ciudades según alloc filtrada
+        const cityWeights = Object.values(allocFilt);
+        const partsCity = apportion(dayGoal, cityWeights.length? cityWeights : [1]);
+        const chips = Object.keys(allocFilt).map((c,i)=>{
+          const v = partsCity[i]||0; const gt = GT_BY_CITY[c];
+          return `<span class='chip'>${CITY_LABEL[c]} · <b>${v}</b> <span class='text-[10px] text-gray-500'>(${gt})</span></span>`;
+        }).join(' ');
+
+        // Hechas del día según selección (usa histórico por GT; si solo ciudad, prorratea dentro del GT)
+        const mapGT = state.perDayGT ? state.perDayGT[day.d] : null;
+        let done=0;
+        if(mapGT && Object.keys(mapGT).length){
+          if(selGT && selCity){
+            const sumAllocGT = Object.entries(day.alloc).reduce((s,[c,q])=> s + (GT_BY_CITY[c]===selGT? Number(q||0):0), 0);
+            const allocCity = Number(day.alloc[selCity]||0);
+            const totGT = Number(mapGT[selGT]||0);
+            done = (sumAllocGT>0 && allocCity>0)? totGT*(allocCity/sumAllocGT) : 0;
+          }else if(selGT){
+            done = Number(mapGT[selGT]||0);
+          }else if(selCity){
+            const gtCity = GT_BY_CITY[selCity];
+            if(gtCity){
+              const sumAllocGT = Object.entries(day.alloc).reduce((s,[c,q])=> s + (GT_BY_CITY[c]===gtCity? Number(q||0):0), 0);
+              const allocCity = Number(day.alloc[selCity]||0);
+              const totGT = Number(mapGT[gtCity]||0);
+              done = (sumAllocGT>0 && allocCity>0)? totGT*(allocCity/sumAllocGT) : 0;
+            } else { done = 0; }
+          }else{
+            // sin filtros: suma todo
+            done = Object.values(mapGT).reduce((s,v)=> s+Number(v||0), 0);
+          }
+        }else{
+          // Si no hay histórico, aproximamos 0 (o podríamos usar perDayDone proporcional)
+          done = 0;
+        }
+
+        const pct= dayGoal? Math.min(100, Math.round((done/dayGoal)*100)) : 0;
+
+        const card=document.createElement('div'); card.className=`border rounded-2xl p-3 ${classForTag(day.tag)}`;
+        card.innerHTML=`<div class=\"flex items-start justify-between gap-3\"><div><p class=\"text-xs text-gray-500\">${badge(day.tag)}</p><h4 class=\"font-semibold mt-1\">${day.name}</h4></div><div class=\"text-right\"><p class=\"text-xs text-gray-500\">Objetivo</p><p class=\"text-lg font-semibold\">${dayGoal}</p></div></div>
+        <div class=\"mt-2 flex flex-wrap gap-1\">${chips||'<span class=\"text-xs text-gray-400\">—</span>'}</div>
+        <div class=\"mt-3\"><div class=\"h-2 rounded-full bg-gray-100\"><div class=\"h-2 rounded-full bg-gray-900\" style=\"width:${pct}%\"></div></div>
+        <div class=\"mt-2 flex items-center justify-between text-sm\"><div class=\"flex items-center gap-2\"><button class=\"no-print w-6 h-6 rounded border\" data-dec=\"${day.d}\">−</button><input class=\"w-16 text-right border rounded px-2 py-1\" type=\"number\" value=\"${Math.round(done)}\" data-val=\"${day.d}\"/><button class=\"no-print w-6 h-6 rounded border\" data-inc=\"${day.d}\">+</button></div><span class=\"text-xs text-gray-500\">Hechas (selección): ${Math.round(done)} · ${pct}%</span></div></div>`;
+        grid.appendChild(card); printed++;
+      });
+      if(grid.children.length){ sec.appendChild(grid); cont.appendChild(sec); }
+    });
+
+    if(!printed) empty.classList.remove('hidden'); else empty.classList.add('hidden');
+  }
+
+  // ==== Eventos ====
+  function bind(){
+    $('#btnPrint').addEventListener('click', ()=> window.print());
+    $('#btnPdf').addEventListener('click', ()=>{ try{ html2pdf().set({ filename:'Planner_Septiembre.pdf', margin:10, image:{type:'jpeg',quality:0.98}, html2canvas:{scale:2}, jsPDF:{unit:'mm',format:'a4',orientation:'portrait'} }).from(document.querySelector('main')).save(); }catch(e){ alert('No se pudo generar PDF'); } });
+    $('#btnReset').addEventListener('click', ()=>{
+      if(!confirm('¿Resetear planner?')) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state.perDayDone={};
+      state.perDayGT=null;
+      state.meta=180;
+      state.hechas=89;
+      const iMetaEl=document.getElementById('iMeta'); if(iMetaEl) iMetaEl.value=state.meta;
+      const iHechasEl=document.getElementById('iHechas'); if(iHechasEl) iHechasEl.value=state.hechas;
+      seedHistoricalIfNeeded();
+      refreshKPIs();
+      renderResumenGT();
+      renderSemanas();
+    });
+    $('#btnResetFiltros').addEventListener('click', ()=>{ $('#fGT').value=''; $('#fCity').value=''; $('#fOnlyStrong').checked=false; $('#fHideClosed').checked=true; $('#fWeek').value=''; renderSemanas(); renderResumenGT(); });
+    ['fGT','fCity','fOnlyStrong','fHideClosed','fWeek'].forEach(id=> document.getElementById(id).addEventListener('change', ()=>{ renderSemanas(); renderResumenGT(); }));
+    ['iMeta','iHechas'].forEach(id=> document.getElementById(id).addEventListener('input', ()=>{ refreshKPIs(); renderResumenGT(); renderSemanas(); }));
+    document.body.addEventListener('click', (e)=>{ const inc=e.target.getAttribute('data-inc'); const dec=e.target.getAttribute('data-dec'); if(inc){ state.perDayDone[inc]=(Number(state.perDayDone[inc]||0))+1; save(); renderSemanas(); renderResumenGT(); } if(dec){ state.perDayDone[dec]=Math.max(0,(Number(state.perDayDone[dec]||0))-1); save(); renderSemanas(); renderResumenGT(); } });
+    document.body.addEventListener('input', (e)=>{ const key=e.target.getAttribute('data-val'); if(!key) return; state.perDayDone[key]=Number(e.target.value||0); save(); renderSemanas(); renderResumenGT(); });
+  }
+
+  // ==== Init ====
+  document.addEventListener('DOMContentLoaded', ()=>{
+    load();
+    // Preferir el valor del HTML para el corte (por si se actualizó manualmente)
+    const iMetaEl=document.getElementById('iMeta'); if(iMetaEl) iMetaEl.value=state.meta;
+    const iHechasEl=document.getElementById('iHechas'); if(iHechasEl){ state.hechas = Number(iHechasEl.value||state.hechas); const kHechasEl=document.getElementById('kHechas'); if(kHechasEl) kHechasEl.textContent=state.hechas; }
+    // Re-sembrar histórico en base al corte actual
+    state.perDayGT=null; state.perDayDone={};
+    seedHistoricalIfNeeded();
+    refreshKPIs(); populateFilters(); renderResumenGT(); renderSemanas(); bind();
+
+    // === Self-tests / Test cases ===
+    try{
+      console.assert(document.getElementById('fGT').options.length>0, 'Filtro GT sin opciones');
+      console.assert(document.getElementById('fWeek').options.length>=4, 'Filtro Semana sin opciones suficientes');
+      const seededTotal = Object.entries(state.perDayGT||{}).reduce((S,[,m])=> S + sumVals(m), 0);
+      console.assert(seededTotal===Number(document.getElementById('iHechas').value||state.hechas), 'Distribución histórica no coincide con hechas del corte');
+      const pctCalc = (Number(document.getElementById('iHechas').value||state.hechas) / Number(document.getElementById('iMeta').value||state.meta));
+      const pctText = document.getElementById('kPctTotal').textContent.trim();
+      console.assert(pctText.endsWith('%'), 'Cumplimiento total no formateado en %');
+      console.assert(!document.body.innerHTML.includes('$187$2'), 'No debe haber tokens de reemplazo');
+      const sumW37 = Object.entries(state.perDayGT||{}).filter(([d])=> weekOf(d)===37).reduce((S,[,m])=> S + sumVals(m), 0);
+      console.assert(sumW37>=0, '');
+      console.assert(typeof renderSemanas==='function' && typeof renderResumenGT==='function', 'Funciones principales no definidas');
+      console.assert(Number(document.getElementById('kHechas').textContent)===Number(document.getElementById('iHechas').value), 'KPI Hechas desincronizado');
+      const effInit = computeInitEff();
+      const effSum = Object.values(effInit).reduce((a,b)=>a+Number(b||0),0);
+      console.assert(effSum===Number(document.getElementById('iHechas').value||state.hechas), 'Init efectivo no suma hechas del corte');
+      console.assert((effInit['Pool']||0)===0, 'Pool no debería quedar con base tras Glosa');
+    }catch(_){/* noop */}
+  });
+</script>
+</body>
+</html>
